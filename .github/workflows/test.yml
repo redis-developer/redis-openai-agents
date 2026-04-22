@@ -1,0 +1,53 @@
+name: Test Suite
+
+on:
+  pull_request:
+
+  push:
+    branches:
+      - main
+
+  schedule:
+    - cron: "0 2 * * *"  # 2 AM UTC nightly
+
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }} - [redis ${{ matrix.redis-version }}]
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.11', '3.12', '3.13']
+        redis-version: ['latest', '8.0.2']
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --all-extras --group dev
+
+      - name: Set Redis image name
+        run: |
+          echo "REDIS_IMAGE=redis:${{ matrix.redis-version }}" >> $GITHUB_ENV
+
+      - name: Run API tests
+        if: matrix.redis-version == 'latest'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          uv run pytest --run-api-tests -v
+
+      - name: Run tests
+        if: matrix.redis-version != 'latest'
+        run: |
+          uv run pytest -v

@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\ntest: fix test quality — delete useless tests, tighten assertions, fix isolation\n\n- Remove ~25 trivial is-not-None/hasattr tests that provide no value\n- Fix conftest.py: narrow exception types, remove unnecessary sleep, add logging\n- Fix connection pool test global state leakage with autouse reset fixture\n- Fix broken test_buffer_cleared_on_flush: provide mock client, add assertion\n- Tighten tautological assertions \\(dlq_len >= 0, escape hatches, weak checks\\)\n- Extract duplicated test helpers \\(_call_model, _make_mock_metrics\\)\n- Add real assertions to semantic cache and hybrid search tests\nEOF\n\\)\")",
+      "Bash(git commit:*)",
+      "Bash(test:*)",
+      "Bash(REDIS_URL=redis://localhost:6379 uv run pytest:*)",
+      "Bash(uv run ruff check:*)",
+      "Bash(uv pip show:*)",
+      "Bash(uv run:*)",
+      "Bash(uv pip index:*)",
+      "Bash(uv sync:*)",
+      "Bash(redis-cli:*)",
+      "Bash(uv lock:*)",
+      "Bash(python3:*)",
+      "Bash(make check:*)"
+    ]
+  }
+}

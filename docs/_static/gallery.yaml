@@ -1,0 +1,10 @@
+- title: Redis OpenAI Agents Examples
+  website: https://github.com/redis/redis-openai-agents/tree/main/examples
+- title: Agentic RAG with Redis
+  website: https://github.com/redis-developer/agentic-rag
+- title: Redis RAG Workbench
+  website: https://github.com/redis-developer/redis-rag-workbench
+- title: OpenAI Agents SDK
+  website: https://github.com/openai/openai-agents-python
+- title: RedisVL Documentation
+  website: https://docs.redisvl.com

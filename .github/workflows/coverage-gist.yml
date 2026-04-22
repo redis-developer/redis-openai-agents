@@ -1,0 +1,47 @@
+name: Update Coverage Badge
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
+
+    - name: Set up Python
+      run: uv python install 3.12
+
+    - name: Install dependencies
+      run: uv sync --all-extras --group dev
+
+    - name: Run tests with coverage
+      run: |
+        uv run pytest --cov=src --cov-report=term --cov-report=json
+        COVERAGE=$(python3 -c "import json; print(int(json.load(open('coverage.json'))['totals']['percent_covered']))")
+        echo "COVERAGE=${COVERAGE}" >> $GITHUB_ENV
+
+        # Set color based on coverage
+        if [ $COVERAGE -lt 70 ]; then
+          echo "COLOR=red" >> $GITHUB_ENV
+        elif [ $COVERAGE -lt 80 ]; then
+          echo "COLOR=yellow" >> $GITHUB_ENV
+        else
+          echo "COLOR=green" >> $GITHUB_ENV
+        fi
+
+    - name: Create Coverage Badge
+      uses: schneegans/dynamic-badges-action@v1.7.0
+      with:
+        auth: ${{ secrets.GIST_TOKEN }}
+        gistID: ${{ secrets.GIST_ID }}
+        filename: redis-openai-agents-coverage.json
+        label: Coverage
+        message: ${{ env.COVERAGE }}%
+        color: ${{ env.COLOR }}

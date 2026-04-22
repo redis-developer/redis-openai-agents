@@ -1,0 +1,15 @@
+version: "3.9"
+services:
+  redis:
+    image: "${REDIS_IMAGE:-redis:8}"
+    ports:
+      - target: 6379
+        published: 0
+        protocol: tcp
+        mode: host
+    environment:
+      - "REDIS_ARGS=--save '' --appendonly no"
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure

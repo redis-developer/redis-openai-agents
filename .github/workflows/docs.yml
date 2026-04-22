@@ -1,0 +1,150 @@
+name: Deploy Documentation
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch all tags
+        run: git fetch --tags
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras --group dev
+
+      - name: Build versioned documentation
+        run: |
+          set -e
+          OUTPUT_DIR="docs/_build/html"
+          mkdir -p "$OUTPUT_DIR"
+
+          # Tag regex: match v0.1.1+ and v1.0.0+
+          TAG_REGEX='^v0\.1\.([1-9][0-9]*)$|^v0\.([2-9]|[0-9]{2,})\.[0-9]+$|^v[1-9][0-9]*\.[0-9]+\.[0-9]+$'
+
+          # Collect matching tags (newest first)
+          TAGS=$(git tag --sort=-v:refname | grep -E "$TAG_REGEX" || true)
+
+          # Track versions for versions.json
+          VERSIONS_JSON='[]'
+          LATEST_TAG=""
+
+          # Build docs for each matching tag
+          for tag in $TAGS; do
+            echo "=== Building docs for tag: $tag ==="
+            # Check if this tag has a docs/ directory
+            if ! git ls-tree --name-only "$tag" -- docs/ > /dev/null 2>&1; then
+              echo "    Skipping $tag (no docs/ directory)"
+              continue
+            fi
+
+            git checkout "$tag" -- docs/ examples/ || git checkout "$tag" -- docs/
+            uv run sphinx-build -b html docs "$OUTPUT_DIR/$tag"
+            git checkout HEAD -- docs/ examples/ 2>/dev/null || git checkout HEAD -- docs/
+
+            if [ -z "$LATEST_TAG" ]; then
+              LATEST_TAG="$tag"
+            fi
+            VERSIONS_JSON=$(echo "$VERSIONS_JSON" | python3 -c "
+          import json, sys
+          v = json.load(sys.stdin)
+          v.append({'name': '$tag', 'tag': True})
+          print(json.dumps(v))")
+          done
+
+          # Build docs for main (current HEAD)
+          echo "=== Building docs for main ==="
+          git checkout HEAD -- docs/ examples/ 2>/dev/null || true
+          uv run sphinx-build -b html docs "$OUTPUT_DIR/main"
+
+          VERSIONS_JSON=$(echo "$VERSIONS_JSON" | python3 -c "
+          import json, sys
+          v = json.load(sys.stdin)
+          v.append({'name': 'main', 'tag': False})
+          print(json.dumps(v))")
+
+          # Determine redirect target
+          TARGET="${LATEST_TAG:-main}"
+
+          # Write versions.json
+          python3 -c "
+          import json
+          versions = json.loads('$VERSIONS_JSON')
+          data = {'versions': versions, 'latest': '${LATEST_TAG}', 'current': ''}
+          with open('$OUTPUT_DIR/versions.json', 'w') as f:
+              json.dump(data, f, indent=2)
+          "
+
+          # Inject current version into each build's versions.json copy
+          for dir in "$OUTPUT_DIR"/*/; do
+            name=$(basename "$dir")
+            cp "$OUTPUT_DIR/versions.json" "$dir/versions.json"
+            python3 -c "
+          import json
+          with open('$dir/versions.json') as f:
+              data = json.load(f)
+          data['current'] = '$name'
+          with open('$dir/versions.json', 'w') as f:
+              json.dump(data, f, indent=2)
+          "
+          done
+
+          # Create root redirect
+          cat > "$OUTPUT_DIR/index.html" << REDIRECT_EOF
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <title>Redirecting...</title>
+            <meta http-equiv="refresh" content="0; url=${TARGET}/index.html">
+          </head>
+          <body>
+            <p>Redirecting to <a href="${TARGET}/index.html">latest documentation</a>...</p>
+          </body>
+          </html>
+          REDIRECT_EOF
+
+          echo "=== Build complete ==="
+          echo "Versions built:"
+          ls -d "$OUTPUT_DIR"/*/
+          echo "Root redirects to: $TARGET"
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/_build/html
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

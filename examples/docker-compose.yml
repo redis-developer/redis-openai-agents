@@ -1,0 +1,31 @@
+name: redis-openai-agents-notebooks
+
+services:
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile.jupyter
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./:/home/jupyter/workspace/examples
+      - ../:/home/jupyter/workspace/redis-openai-agents
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - USER_AGENT=RedisOpenAIAgentsJupyter/0.1.0
+    user: jupyter
+    working_dir: /home/jupyter/workspace/examples
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:8
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5

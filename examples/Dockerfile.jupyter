@@ -1,0 +1,63 @@
+FROM python:3.12-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up a non-root user first
+RUN useradd -m jupyter
+
+WORKDIR /home/jupyter/workspace
+
+# Copy example notebooks to workspace
+COPY ./ /home/jupyter/workspace/examples/
+
+# Set permissions
+RUN chown -R jupyter:jupyter /home/jupyter/workspace
+
+# Switch to non-root user
+USER jupyter
+
+# Install uv as jupyter user
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/home/jupyter/.local/bin:/home/jupyter/venv/bin:$PATH"
+
+# Set up virtual environment
+RUN python -m venv /home/jupyter/venv
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Install core dependencies using uv into venv
+RUN uv pip install \
+    "openai-agents>=0.6.0" \
+    "redis[hiredis]>=5.2.0" \
+    "redisvl>=0.11.0" \
+    jupyter \
+    ipykernel \
+    python-dotenv
+
+# Create startup script that checks if local library is mounted
+RUN echo '#!/bin/bash\n\
+if [ -d "/home/jupyter/workspace/redis-openai-agents/src" ]; then\n\
+    echo "Installing local redis-openai-agents library in editable mode..."\n\
+    uv pip install --system -e /home/jupyter/workspace/redis-openai-agents\n\
+else\n\
+    echo "Local library not found, continuing without it..."\n\
+fi\n\
+echo "Starting Jupyter Notebook..."\n\
+exec jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser \\\n\
+    --ServerApp.token="" \\\n\
+    --ServerApp.password="" \\\n\
+    --ServerApp.allow_root=True \\\n\
+    --NotebookApp.disable_check_xsrf=True' > /home/jupyter/start-jupyter.sh && \
+    chmod +x /home/jupyter/start-jupyter.sh
+
+# Set working directory to examples folder
+WORKDIR /home/jupyter/workspace/examples
+
+# Expose Jupyter port
+EXPOSE 8888
+
+# Start Jupyter using startup script
+CMD ["/home/jupyter/start-jupyter.sh"]
